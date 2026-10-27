@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Town & Country Life: The Cozy World Quest</title>
+    <!-- Tailwind CSS for modern HUD styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-user-select: none;
+            margin: 0;
+            padding: 0;
+        }
+        body, html {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: 'Comic Sans MS', 'Chalkboard SE', 'Fredoka', system-ui, sans-serif;
+            background-color: #9BD7E8;
+        }
+        #game-container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            display: block;
+        }
+        #canvas3d {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Storybook Cozy UI Styling */
+        .cozy-card {
+            background: #FFF3D6;
+            border: 4px solid #986545;
+            border-radius: 20px;
+            box-shadow: 0 6px 0 #594039;
+        }
+        .cozy-btn {
+            background: #F4B39A;
+            color: #594039;
+            border: 3.5px solid #986545;
+            border-radius: 16px;
+            font-weight: 800;
+            box-shadow: 0 5px 0 #594039;
+            transition: transform 0.1s, background-color 0.15s;
+            cursor: pointer;
+        }
+        .cozy-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #594039;
+        }
+        .cozy-btn-green {
+            background: #76B85A;
+            color: #FFF;
+        }
+        .cozy-btn-red {
+            background: #E99BB3;
+            color: #FFF;
+        }
+
+        /* Interaction Prompt Bounce */
+        #interaction-prompt {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 25;
+            display: none;
+            animation: bouncePrompt 0.6s infinite alternate ease-in-out;
+        }
+        @keyframes bouncePrompt {
+            from { transform: translateX(-50%) translateY(0); }
+            to { transform: translateX(-50%) translateY(-10px); }
+        }
+
+        /* Mobile Controls */
+        #touch-controls {
+            position: absolute;
+            bottom: 30px;
+            left: 30px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.45);
+            border: 3.5px solid #FFF;
+            border-radius: 50%;
+            z-index: 20;
+            touch-action: none;
+            display: none;
+        }
+        #joystick-knob {
+            position: absolute;
+            top: 35px;
+            left: 35px;
+            width: 50px;
+            height: 50px;
+            background: #E99BB3;
+            border: 3px solid #FFF;
+            border-radius: 50%;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.15);
+        }
+
+        @media (max-width: 768px) {
+            #touch-controls { display: block; }
+        }
+    </style>
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="canvas3d"></canvas>
+
+    <!-- Top HUD Layer -->
+    <div class="absolute top-4 left-4 right-4 flex justify-between items-center pointer-events-none z-10">
+        <div class="cozy-card px-4 py-2 flex items-center gap-3 text-sm md:text-base font-bold text-[#594039] pointer-events-auto">
+            <span>⭐ Stars: <span id="star-count" class="text-amber-600 font-extrabold">0</span></span>
+            <span>|</span>
+            <span>🔑 Keys: <span id="key-count">None</span></span>
+            <span>|</span>
+            <span class="hidden sm:inline">🌟 Mission: <span id="mission-text" class="text-emerald-700">Explore Town & Find Bakery</span></span>
+        </div>
+
+        <div class="flex gap-2 pointer-events-auto">
+            <button id="btn-audio" class="cozy-btn w-12 h-12 flex items-center justify-center text-xl">🎵</button>
+            <button id="btn-sfx" class="cozy-btn w-12 h-12 flex items-center justify-center text-xl">🔊</button>
+            <button id="btn-reset" class="cozy-btn px-3 h-12 text-xs text-red-800 bg-red-100">Reset</button>
+        </div>
+    </div>
+
+    <!-- Dynamic Interaction Prompt -->
+    <div id="interaction-prompt">
+        <button id="btn-interact-action" class="cozy-btn cozy-btn-green px-6 py-3 text-lg md:text-xl flex items-center gap-2">
+            <span>💬</span> <span id="prompt-text">Press E / Tap to Interact</span>
+        </button>
+    </div>
+
+    <!-- Mobile Touch Controls -->
+    <div id="touch-controls">
+        <div id="joystick-knob"></div>
+    </div>
+
+    <!-- Start / Main Storybook Modal -->
+    <div id="start-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div class="cozy-card max-w-lg w-full p-6 text-center text-[#594039]">
+            <h1 class="text-3xl md:text-4xl font-extrabold text-[#C97958] mb-2">TOWN & COUNTRY LIFE</h1>
+            <p class="text-lg font-bold text-amber-700 mb-4">The Cozy World Quest</p>
+            <div class="bg-amber-50/80 border-2 border-[#986545] rounded-xl p-4 text-sm mb-6 text-left space-y-2">
+                <p>🏡 <strong>Objective:</strong> Explore cozy hedges, visit the Town Bakery, collect golden stars, and solve 3 language quests!</p>
+                <p>⌨️ <strong>Controls:</strong> WASD or Arrow Keys to move. On mobile, use the touch joystick on screen.</p>
+                <p>🎯 <strong>Tip:</strong> Approach buildings, gates, and chests to interact.</p>
+            </div>
+            <button id="btn-start" class="cozy-btn cozy-btn-green w-full py-4 text-xl">START QUEST 🌾</button>
+        </div>
+    </div>
+
+    <!-- Quest Challenge Modal -->
+    <div id="quest-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 hidden">
+        <div class="cozy-card max-w-xl w-full p-6 text-[#594039] relative max-h-[90vh] overflow-y-auto">
+            <h2 id="quest-title" class="text-2xl font-black text-[#C97958] mb-2 text-center">Quest Challenge</h2>
+            <p id="quest-desc" class="text-sm md:text-base text-gray-700 mb-4 text-center"></p>
+
+            <div id="quest-content-area" class="mb-4"></div>
+
+            <!-- Confidence Rating -->
+            <div class="bg-amber-100/70 p-3 rounded-xl border-2 border-amber-300 mb-4">
+                <label class="block text-xs font-bold text-amber-900 mb-1 text-center">How confident are you with your answer?</label>
+                <div class="flex justify-center gap-2">
+                    <button class="conf-btn cozy-btn bg-white text-xs px-3 py-1.5" data-conf="Confident">😎 Confident</button>
+                    <button class="conf-btn cozy-btn bg-white text-xs px-3 py-1.5" data-conf="Unsure">🤔 Unsure</button>
+                    <button class="conf-btn cozy-btn bg-white text-xs px-3 py-1.5" data-conf="Guessing">🎲 Guessing</button>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <button id="btn-submit-quest" class="cozy-btn cozy-btn-green flex-1 py-3 text-lg">SUBMIT ANSWER</button>
+                <button id="btn-close-quest" class="cozy-btn cozy-btn-red px-5 py-3 text-lg">EXIT</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Victory Screen Modal -->
+    <div id="victory-modal" class="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 hidden">
+        <div class="cozy-card max-w-md w-full p-6 text-center text-[#594039]">
+            <h1 class="text-3xl font-black text-emerald-600 mb-2">🎉 QUEST COMPLETE!</h1>
+            <p class="text-gray-600 mb-4">You solved all challenges in Town & Country Life!</p>
+            
+            <div class="bg-white/80 border-2 border-[#986545] rounded-xl p-4 text-left space-y-2 mb-6 text-sm">
+                <p class="flex justify-between"><span>⭐ Total Stars Collected:</span> <strong id="summary-stars" class="text-amber-600">0</strong></p>
+                <p class="flex justify-between"><span>🎯 Quests Completed:</span> <strong id="summary-quests" class="text-emerald-600">3 / 3</strong></p>
+                <p class="flex justify-between"><span>📝 Total Attempts:</span> <strong id="summary-attempts" class="text-blue-600">0</strong></p>
+            </div>
+
+            <button id="btn-restart-game" class="cozy-btn cozy-btn-green w-full py-3 text-lg">PLAY AGAIN 🔄</button>
+        </div>
+    </div>
+</div>
+
+<script>
+/* --- WEB AUDIO SYNTHESIZER --- */
+class SoundEngine {
+    constructor() {
+        this.ctx = null;
+        this.musicOn = true;
+        this.sfxOn = true;
+        this.isPlayingMusic = false;
+        this.musicTimer = null;
+    }
+
+    init() {
+        if (!this.ctx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioCtx();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    }
+
+    playNote(freq, type = 'sine', duration = 0.2, vol = 0.1) {
+        if (!this.sfxOn || !this.ctx) return;
+        try {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.0001, this.ctx.currentTime + duration);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start();
+            osc.stop(this.ctx.currentTime + duration);
+        } catch(e) {}
+    }
+
+    playSparkle() {
+        if (!this.sfxOn) return;
+        [523.25, 659.25, 783.99, 1046.50].forEach((n, i) => {
+            setTimeout(() => this.playNote(n, 'sine', 0.12, 0.08), i * 60);
+        });
+    }
+
+    playCorrect() {
+        if (!this.sfxOn) return;
+        [440, 554.37, 659.25, 880].forEach((n, i) => {
+            setTimeout(() => this.playNote(n, 'triangle', 0.18, 0.1), i * 80);
+        });
+    }
+
+    playIncorrect() {
+        if (!this.sfxOn) return;
+        [280, 220].forEach((n, i) => {
+            setTimeout(() => this.playNote(n, 'sawtooth', 0.2, 0.08), i * 100);
+        });
+    }
+
+    startMusic() {
+        if (!this.musicOn || this.isPlayingMusic) return;
+        this.init();
+        this.isPlayingMusic = true;
+        const melody = [261.63, 329.63, 392.00, 523.25, 440.00, 392.00, 329.63, 293.66];
+        let noteIdx = 0;
+
+        const loop = () => {
+            if (!this.isPlayingMusic || !this.musicOn) return;
+            this.playNote(melody[noteIdx], 'sine', 0.35, 0.025);
+            noteIdx = (noteIdx + 1) % melody.length;
+            this.musicTimer = setTimeout(loop, 480);
+        };
+        loop();
+    }
+
+    stopMusic() {
+        this.isPlayingMusic = false;
+        if (this.musicTimer) clearTimeout(this.musicTimer);
+    }
+}
+
+const audio = new SoundEngine();
+
+/* --- GAME STATE & LOCAL STORAGE --- */
+const gameState = {
+    stars: 0,
+    keys: { bakeryKey: false },
+    completedQuests: new Set(),
+    selectedConfidence: 'Confident',
+    attemptsCount: 0,
+    currentInteractable: null
+};
+
+function loadSavedProgress() {
+    try {
+        const saved = localStorage.getItem('cozy_world_save');
+        if (saved) {
+            const data = JSON.parse(saved);
+            gameState.stars = data.stars || 0;
+            gameState.keys = data.keys || { bakeryKey: false };
+            if (data.completedQuests) gameState.completedQuests = new Set(data.completedQuests);
+        }
+    } catch(e) {}
+    updateHUD();
+}
+
+function saveProgress() {
+    try {
+        localStorage.setItem('cozy_world_save', JSON.stringify({
+            stars: gameState.stars,
+            keys: gameState.keys,
+            completedQuests: Array.from(gameState.completedQuests)
+        }));
+    } catch(e) {}
+}
+
+function updateHUD() {
+    document.getElementById('star-count').innerText = gameState.stars;
+    document.getElementById('key-count').innerText = gameState.keys.bakeryKey ? "🔑 Bakery Key" : "None";
+
+    const missionEl = document.getElementById('mission-text');
+    if (!gameState.completedQuests.has('TownQuest')) {
+        missionEl.innerText = "Visit the Town Chest";
+    } else if (!gameState.completedQuests.has('BakeryQuest')) {
+        missionEl.innerText = "Enter the Town Bakery 🍞";
+    } else if (!gameState.completedQuests.has('CountryQuest')) {
+        missionEl.innerText = "Explore Country Hedges";
+    } else {
+        missionEl.innerText = "World Quest Complete! 🎉";
+    }
+}
+
+/* --- 3D ENVIRONMENT SETUP --- */
+let scene, camera, renderer, player, starMesh;
+const colliders = [];
+const interactables = [];
+const starsList = [];
+const keysPressed = {};
+let touchVector = { x: 0, y: 0 };
+
+function init3D() {
+    const container = document.getElementById('canvas3d');
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9BD7E8);
+    scene.fog = new THREE.FogExp2(0x9BD7E8, 0.015);
+
+    const aspect = window.innerWidth / window.innerHeight;
+    camera = new THREE.PerspectiveCamera(45, aspect, 0.1, 1000);
+    camera.position.set(0, 22, 28);
+
+    renderer = new THREE.WebGLRenderer({ canvas: container, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+    // Cozy Sunlight & Atmosphere
+    const ambientLight = new THREE.AmbientLight(0xFFF3D6, 0.75);
+    scene.add(ambientLight);
+
+    const sunLight = new THREE.DirectionalLight(0xFFF3D6, 0.85);
+    sunLight.position.set(20, 40, 20);
+    sunLight.castShadow = true;
+    sunLight.shadow.mapSize.width = 2048;
+    sunLight.shadow.mapSize.height = 2048;
+    scene.add(sunLight);
+
+    // Cozy Materials
+    const matGrass = new THREE.MeshLambertMaterial({ color: 0x76B85A });
+    const matPath = new THREE.MeshLambertMaterial({ color: 0xFFF3D6 });
+    const matHedge = new THREE.MeshLambertMaterial({ color: 0x47764D });
+    const matRoof = new THREE.MeshLambertMaterial({ color: 0xC97958 });
+    const matWall = new THREE.MeshLambertMaterial({ color: 0xFFF3D6 });
+    const matWood = new THREE.MeshLambertMaterial({ color: 0x986545 });
+    const matGold = new THREE.MeshStandardMaterial({ color: 0xF7D977, metalness: 0.5, roughness: 0.2 });
+
+    // Ground Ground
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(100, 100), matGrass);
+    ground.rotation.x = -Math.PI / 2;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Winding Stone Paths
+    function createPath(x, z, w, h) {
+        const path = new THREE.Mesh(new THREE.PlaneGeometry(w, h), matPath);
+        path.rotation.x = -Math.PI / 2;
+        path.position.set(x, 0.01, z);
+        path.receiveShadow = true;
+        scene.add(path);
+    }
+    createPath(0, 5, 6, 30);
+    createPath(8, -7, 22, 6);
+
+    // Maze Hedges
+    function createHedge(x, z, w, h, d) {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), matHedge);
+        mesh.position.set(x, h / 2, z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        scene.add(mesh);
+
+        const box = new THREE.Box3().setFromObject(mesh);
+        colliders.push(box);
+    }
+
+    createHedge(-15, 0, 2, 3, 30);
+    createHedge(15, 0, 2, 3, 30);
+    createHedge(-5, -10, 18, 3, 2);
+    createHedge(5, 0, 2, 3, 14);
+
+    // 3D Bakery Building
+    const bakeryGroup = new THREE.Group();
+    const bBody = new THREE.Mesh(new THREE.BoxGeometry(8, 5, 7), matWall);
+    bBody.position.y = 2.5;
+    bBody.castShadow = true;
+    bakeryGroup.add(bBody);
+
+    const bRoof = new THREE.Mesh(new THREE.ConeGeometry(6.5, 3.5, 4), matRoof);
+    bRoof.position.y = 6.25;
+    bRoof.rotation.y = Math.PI / 4;
+    bRoof.castShadow = true;
+    bakeryGroup.add(bRoof);
+
+    const bDoor = new THREE.Mesh(new THREE.BoxGeometry(1.8, 3, 0.2), matWood);
+    bDoor.position.set(0, 1.5, 3.55);
+    bakeryGroup.add(bDoor);
+
+    bakeryGroup.position.set(10, 0, -10);
+    scene.add(bakeryGroup);
+
+    const bakeryBox = new THREE.Box3().setFromObject(bakeryGroup);
+    colliders.push(bakeryBox);
+
+    interactables.push({
+        id: 'BakeryQuest',
+        name: 'Town Bakery 🍞',
+        type: 'building',
+        position: new THREE.Vector3(10, 0, -6.5)
+    });
+
+    // Town Chest
+    createChest(-10, -5, 'TownQuest', 'Town Facility Chest');
+    // Country Chest
+    createChest(10, 10, 'CountryQuest', 'Country Life Chest');
+
+    // Collectible Floating Stars
+    createStar(0, 1.5, -2);
+    createStar(-8, 1.5, 5);
+    createStar(8, 1.5, 5);
+
+    // Chibi Explorer Player
+    player = new THREE.Group();
+    const matPlayer = new THREE.MeshStandardMaterial({ color: 0xE99BB3, roughness: 0.3 });
+
+    const pBody = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 1.2, 16), matPlayer);
+    pBody.position.y = 0.6;
+    pBody.castShadow = true;
+    player.add(pBody);
+
+    const pHead = new THREE.Mesh(new THREE.SphereGeometry(0.65, 16, 16), new THREE.MeshStandardMaterial({ color: 0xFFF3D6 }));
+    pHead.position.y = 1.4;
+    pHead.castShadow = true;
+    player.add(pHead);
+
+    const pPack = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.4), matWood);
+    pPack.position.set(0, 0.8, -0.45);
+    player.add(pPack);
+
+    player.position.set(0, 0, 15);
+    scene.add(player);
+
+    setupControls();
+    loadSavedProgress();
+    window.addEventListener('resize', onWindowResize);
+    animate();
+}
+
+function createChest(x, z, id, name) {
+    const group = new THREE.Group();
+    group.position.set(x, 0, z);
+
+    const matWood = new THREE.MeshLambertMaterial({ color: 0x986545 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(2, 1.4, 1.4), matWood);
+    box.position.y = 0.7;
+    box.castShadow = true;
+    group.add(box);
+
+    scene.add(group);
+
+    interactables.push({
+        id: id,
+        name: name,
+        type: 'chest',
+        position: new THREE.Vector3(x, 0, z)
+    });
+}
+
+function createStar(x, y, z) {
+    const starGeo = new THREE.OctahedronGeometry(0.8, 0);
+    const starMat = new THREE.MeshStandardMaterial({ color: 0xF7D977, metalness: 0.5, roughness: 0.2 });
+    const star = new THREE.Mesh(starGeo, starMat);
+    star.position.set(x, y, z);
+    star.castShadow = true;
+    scene.add(star);
+    starsList.push(star);
+}
+
+/* --- CONTROLS & TOUCH ENGINE --- */
+function setupControls() {
+    window.addEventListener('keydown', (e) => {
+        keysPressed[e.key.toLowerCase()] = true;
+        if (e.key.toLowerCase() === 'e') triggerInteraction();
+    });
+    window.addEventListener('keyup', (e) => {
+        keysPressed[e.key.toLowerCase()] = false;
+    });
+
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+        document.getElementById('touch-controls').style.display = 'block';
+        setupJoystick();
+    }
+
+    document.getElementById('btn-interact-action').addEventListener('click', triggerInteraction);
+}
+
+function setupJoystick() {
+    const joystick = document.getElementById('touch-controls');
+    const knob = document.getElementById('joystick-knob');
+    let active = false;
+    let origin = { x: 0, y: 0 };
+
+    joystick.addEventListener('touchstart', (e) => {
+        active = true;
+        const rect = joystick.getBoundingClientRect();
+        origin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+
+    window.addEventListener('touchmove', (e) => {
+        if (!active) return;
+        const touch = e.touches[0];
+        const dx = touch.clientX - origin.x;
+        const dy = touch.clientY - origin.y;
+        const dist = Math.min(Math.hypot(dx, dy), 40);
+        const angle = Math.atan2(dy, dx);
+        
+        knob.style.transform = `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px)`;
+        touchVector.x = (Math.cos(angle) * dist) / 40;
+        touchVector.y = (Math.sin(angle) * dist) / 40;
+    });
+
+    const resetJoystick = () => {
+        active = false;
+        knob.style.transform = `translate(0px, 0px)`;
+        touchVector = { x: 0, y: 0 };
+    };
+    window.addEventListener('touchend', resetJoystick);
+    window.addEventListener('touchcancel', resetJoystick);
+}
+
+/* --- GAME LOOP & MOVEMENT --- */
+function animate() {
+    requestAnimationFrame(animate);
+
+    let dx = 0;
+    let dz = 0;
+    const speed = 0.16;
+
+    if (keysPressed['w'] || keysPressed['arrowup']) dz -= 1;
+    if (keysPressed['s'] || keysPressed['arrowdown']) dz += 1;
+    if (keysPressed['a'] || keysPressed['arrowleft']) dx -= 1;
+    if (keysPressed['d'] || keysPressed['arrowright']) dx += 1;
+
+    if (touchVector.x !== 0 || touchVector.y !== 0) {
+        dx = touchVector.x;
+        dz = touchVector.y;
+    }
+
+    const len = Math.hypot(dx, dz);
+    if (len > 0) {
+        dx = (dx / len) * speed;
+        dz = (dz / len) * speed;
+
+        const nextPos = player.position.clone();
+        nextPos.x += dx;
+        nextPos.z += dz;
+
+        const playerBox = new THREE.Box3().setFromCenterAndSize(
+            nextPos.clone().add(new THREE.Vector3(0, 1, 0)),
+            new THREE.Vector3(1, 2, 1)
+        );
+
+        let collided = false;
+        for (let box of colliders) {
+            if (playerBox.intersectsBox(box)) {
+                collided = true;
+                break;
+            }
+        }
+
+        if (!collided) {
+            player.position.copy(nextPos);
+            player.rotation.y = Math.atan2(dx, dz);
+        }
+    }
+
+    // Camera Smooth Follow
+    camera.position.x += (player.position.x - camera.position.x) * 0.1;
+    camera.position.z += (player.position.z + 28 - camera.position.z) * 0.1;
+    camera.lookAt(player.position.x, player.position.y + 1, player.position.z);
+
+    // Rotate Stars & Pickup Check
+    starsList.forEach(star => {
+        if (star.visible) {
+            star.rotation.y += 0.03;
+            if (player.position.distanceTo(star.position) < 1.8) {
+                star.visible = false;
+                gameState.stars += 1;
+                saveProgress();
+                updateHUD();
+                audio.playSparkle();
+            }
+        }
+    });
+
+    // Proximity Interactions
+    let nearest = null;
+    let minDist = 3.8;
+
+    interactables.forEach(item => {
+        const d = player.position.distanceTo(item.position);
+        if (d < minDist) {
+            nearest = item;
+            minDist = d;
+        }
+    });
+
+    const promptEl = document.getElementById('interaction-prompt');
+    const promptText = document.getElementById('prompt-text');
+
+    if (nearest) {
+        gameState.currentInteractable = nearest;
+        promptEl.style.display = 'block';
+        promptText.innerText = `Tap / Press E: ${nearest.name}`;
+    } else {
+        gameState.currentInteractable = null;
+        promptEl.style.display = 'none';
+    }
+
+    renderer.render(scene, camera);
+}
+
+/* --- QUEST SYSTEM --- */
+function triggerInteraction() {
+    const item = gameState.currentInteractable;
+    if (!item) return;
+
+    openQuestModal(item.id);
+}
+
+function openQuestModal(questId) {
+    const titleEl = document.getElementById('quest-title');
+    const descEl = document.getElementById('quest-desc');
+    const areaEl = document.getElementById('quest-content-area');
+    areaEl.innerHTML = '';
+
+    if (questId === 'TownQuest') {
+        titleEl.innerText = "🏙️ Town Facility Challenge";
+        descEl.innerText = "Select ALL 3 facilities that belong specifically to a Town/City!";
+        
+        const options = ["Skyscraper", "Cow Barn", "Shopping Mall", "Paddy Field", "Hospital"];
+        options.forEach(opt => {
+            const label = document.createElement('label');
+            label.className = "flex items-center gap-3 bg-white p-3 border-2 border-amber-300 rounded-xl mb-2 cursor-pointer hover:bg-amber-50 font-semibold";
+            label.innerHTML = `<input type="checkbox" name="town-opt" value="${opt}" class="w-5 h-5 text-emerald-600"> <span>${opt}</span>`;
+            areaEl.appendChild(label);
+        });
+    } else if (questId === 'BakeryQuest') {
+        titleEl.innerText = "🍞 Town Bakery Entrance Quest";
+        descEl.innerText = "Choose the correct preposition to enter the Bakery!";
+
+        const qBox = document.createElement('div');
+        qBox.className = "bg-amber-50 p-4 border-2 border-amber-300 rounded-xl text-center font-bold text-lg mb-3";
+        qBox.innerText = '"The baker is waiting ________ the town bakery."';
+        areaEl.appendChild(qBox);
+
+        const options = ["inside", "under", "between"];
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = "cozy-btn bg-white w-full py-3 mb-2 text-center font-semibold hover:bg-amber-100";
+            btn.innerText = opt;
+            btn.onclick = () => {
+                document.querySelectorAll('#quest-content-area button').forEach(b => b.classList.remove('bg-amber-200'));
+                btn.classList.add('bg-amber-200');
+                btn.dataset.selected = opt;
+            };
+            areaEl.appendChild(btn);
+        });
+    } else if (questId === 'CountryQuest') {
+        titleEl.innerText = "🌾 Country Life Comparison";
+        descEl.innerText = "Select the correct comparative adjective!";
+
+        const qBox = document.createElement('div');
+        qBox.className = "bg-amber-50 p-4 border-2 border-amber-300 rounded-xl text-center font-bold text-lg mb-3";
+        qBox.innerText = '"Life in the countryside is ________ than life in the city."';
+        areaEl.appendChild(qBox);
+
+        const options = ["quieter", "more quieter", "quietest"];
+        options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.className = "cozy-btn bg-white w-full py-3 mb-2 text-center font-semibold hover:bg-amber-100";
+            btn.innerText = opt;
+            btn.onclick = () => {
+                document.querySelectorAll('#quest-content-area button').forEach(b => b.classList.remove('bg-amber-200'));
+                btn.classList.add('bg-amber-200');
+                btn.dataset.selected = opt;
+            };
+            areaEl.appendChild(btn);
+        });
+    }
+
+    document.getElementById('quest-modal').dataset.questId = questId;
+    document.getElementById('quest-modal').classList.remove('hidden');
+}
+
+// Confidence Rating Buttons
+document.querySelectorAll('.conf-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.conf-btn').forEach(b => b.classList.remove('bg-amber-300', 'border-amber-600'));
+        btn.classList.add('bg-amber-300', 'border-amber-600');
+        gameState.selectedConfidence = btn.dataset.conf;
+    });
+});
+
+document.getElementById('btn-submit-quest').addEventListener('click', () => {
+    const questId = document.getElementById('quest-modal').dataset.questId;
+    gameState.attemptsCount += 1;
+    let isCorrect = false;
+
+    if (questId === 'TownQuest') {
+        const checked = Array.from(document.querySelectorAll('input[name="town-opt"]:checked')).map(c => c.value);
+        if (checked.length === 3 && checked.includes("Skyscraper") && checked.includes("Shopping Mall") && checked.includes("Hospital")) {
+            isCorrect = true;
+        }
+    } else if (questId === 'BakeryQuest') {
+        const selectedBtn = document.querySelector('#quest-content-area button[data-selected]');
+        if (selectedBtn && selectedBtn.dataset.selected === 'inside') {
+            isCorrect = true;
+        }
+    } else if (questId === 'CountryQuest') {
+        const selectedBtn = document.querySelector('#quest-content-area button[data-selected]');
+        if (selectedBtn && selectedBtn.dataset.selected === 'quieter') {
+            isCorrect = true;
+        }
+    }
+
+    if (isCorrect) {
+        audio.playCorrect();
+        alert("🎉 Excellent work! Challenge solved!");
+        gameState.completedQuests.add(questId);
+        gameState.stars += 5;
+        saveProgress();
+        updateHUD();
+        document.getElementById('quest-modal').classList.add('hidden');
+
+        if (gameState.completedQuests.size >= 3) {
+            showVictoryScreen();
+        }
+    } else {
+        audio.playIncorrect();
+        alert("❌ Not quite right! Re-read carefully and try again.");
+    }
+});
+
+document.getElementById('btn-close-quest').addEventListener('click', () => {
+    document.getElementById('quest-modal').classList.add('hidden');
+});
+
+function showVictoryScreen() {
+    document.getElementById('summary-stars').innerText = gameState.stars;
+    document.getElementById('summary-attempts').innerText = gameState.attemptsCount;
+    document.getElementById('victory-modal').classList.remove('hidden');
+}
+
+function onWindowResize() {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+}
+
+// UI Buttons
+document.getElementById('btn-start').addEventListener('click', () => {
+    document.getElementById('start-modal').style.display = 'none';
+    audio.init();
+    audio.startMusic();
+});
+
+document.getElementById('btn-audio').addEventListener('click', () => {
+    audio.musicOn = !audio.musicOn;
+    document.getElementById('btn-audio').innerText = audio.musicOn ? '🎵' : '🔇';
+    if (audio.musicOn) audio.startMusic(); else audio.stopMusic();
+});
+
+document.getElementById('btn-sfx').addEventListener('click', () => {
+    audio.sfxOn = !audio.sfxOn;
+    document.getElementById('btn-sfx').innerText = audio.sfxOn ? '🔊' : '🔈';
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+    localStorage.removeItem('cozy_world_save');
+    location.reload();
+});
+
+document.getElementById('btn-restart-game').addEventListener('click', () => {
+    localStorage.removeItem('cozy_world_save');
+    location.reload();
+});
+
+window.onload = init3D;
+</script>
+</body>
+</html>
